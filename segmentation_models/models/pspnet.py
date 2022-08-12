@@ -243,3 +243,8 @@ def PSPNet(
         model.load_weights(weights)
 
     return model
+
+
+def setup_submodules(submodule_args):
+    global backend, layers, models, keras_utils
+    backend, layers, models, keras_utils = get_submodules_from_kwargs(submodule_args)
