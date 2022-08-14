@@ -5,6 +5,8 @@ from classification_models.models_factory import ModelsFactory
 from . import inception_resnet_v2 as irv2
 from . import inception_v3 as iv3
 
+from .convnext import ConvNeXtBase
+
 
 class BackbonesFactory(ModelsFactory):
     _default_feature_layers = {
@@ -70,6 +72,10 @@ class BackbonesFactory(ModelsFactory):
         'efficientnetb7': ('block6a_expand_activation', 'block4a_expand_activation',
                            'block3a_expand_activation', 'block2a_expand_activation'),
 
+        'ConvNeXtBase': (   # 'convnext_base_stage_3_block_2_add',
+                         'convnext_base_stage_2_block_26_add',
+                         'convnext_base_stage_1_block_2_add',
+                         'convnext_base_stage_0_block_2_add'),
     }
 
     _models_update = {
@@ -84,6 +90,8 @@ class BackbonesFactory(ModelsFactory):
         'efficientnetb5': [eff.EfficientNetB5, eff.preprocess_input],
         'efficientnetb6': [eff.EfficientNetB6, eff.preprocess_input],
         'efficientnetb7': [eff.EfficientNetB7, eff.preprocess_input],
+
+        'ConvNeXtBase': [ConvNeXtBase, None],
     }
 
     # currently not supported

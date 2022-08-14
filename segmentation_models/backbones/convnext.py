@@ -21,14 +21,14 @@ References:
 """
 
 import numpy as np
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
-from keras import backend
-from keras import layers
-from keras import utils
-from keras.applications import imagenet_utils
-from keras.engine import sequential
-from keras.engine import training as training_lib
+from tensorflow.keras import backend
+from tensorflow.keras import layers
+from tensorflow.keras import utils
+from tensorflow.keras.applications import imagenet_utils
+from tensorflow.python.keras.engine import sequential
+from tensorflow.python.keras.engine import training as training_lib
 
 # isort: off
 from tensorflow.python.util.tf_export import keras_export
@@ -272,7 +272,9 @@ def ConvNeXtBlock(
         else:
             layer = layers.Activation("linear", name=name + "_identity")
 
-        return inputs + layer(x)
+        x = layer(x)
+        x = layers.Add(name=name + "_add")([inputs, x])
+        return x
 
     return apply
 
@@ -331,7 +333,7 @@ def ConvNeXt(
     layer_scale_init_value=1e-6,
     default_size=224,
     model_name="convnext",
-    include_preprocessing=True,
+    include_preprocessing=False,
     include_top=True,
     weights=None,
     input_tensor=None,
@@ -401,15 +403,15 @@ def ConvNeXt(
             " as true, `classes` should be 1000"
         )
 
-    # Determine proper input shape.
-    input_shape = imagenet_utils.obtain_input_shape(
-        input_shape,
-        default_size=default_size,
-        min_size=32,
-        data_format=backend.image_data_format(),
-        require_flatten=include_top,
-        weights=weights,
-    )
+    # # Determine proper input shape.
+    # input_shape = imagenet_utils.obtain_input_shape(
+    #     input_shape,
+    #     default_size=default_size,
+    #     min_size=32,
+    #     data_format=backend.image_data_format(),
+    #     require_flatten=include_top,
+    #     weights=weights,
+    # )
 
     if input_tensor is None:
         img_input = layers.Input(shape=input_shape)
@@ -516,7 +518,8 @@ def ConvNeXt(
             file_suffix = "_notop.h5"
             file_hash = WEIGHTS_HASHES[model_name][1]
         file_name = model_name + file_suffix
-        weights_path = utils.data_utils.get_file(
+        # weights_path = utils.data_utils.get_file(
+        weights_path=utils.get_file(
             file_name,
             BASE_WEIGHTS_PATH + file_name,
             cache_subdir="models",
@@ -605,13 +608,14 @@ def ConvNeXtSmall(
 def ConvNeXtBase(
     model_name="convnext_base",
     include_top=True,
-    include_preprocessing=True,
+    include_preprocessing=False,
     weights="imagenet",
     input_tensor=None,
     input_shape=None,
     pooling=None,
     classes=1000,
     classifier_activation="softmax",
+    **kwargs,
 ):
     return ConvNeXt(
         depths=MODEL_CONFIGS["base"]["depths"],

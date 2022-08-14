@@ -135,6 +135,7 @@ def test_fpn(backbone):
 
 def test_uper_decoder():
     backbone = 'efficientnetb1'
+#    backbone = 'ConvNeXtBase'
 
     _test_shape(
         UPerDecoder, backbone, input_shape=(512, 512, 3), encoder_weights=None)
