@@ -182,28 +182,32 @@ def build_fpn(
     x = ppm_output
 
     # build FPN pyramid
-    p5 = FPNBlock(pyramid_filters, stage=5)(x, skips[0])
+    p5 = FPNBlock(pyramid_filters, stage=5)(x, skips[2])
     p4 = FPNBlock(pyramid_filters, stage=4)(p5, skips[1])
-    p3 = FPNBlock(pyramid_filters, stage=3)(p4, skips[2])
-    p2 = FPNBlock(pyramid_filters, stage=2)(p3, skips[3])
+    p3 = FPNBlock(pyramid_filters, stage=3)(p4, skips[0])
+    # p2 = FPNBlock(pyramid_filters, stage=2)(p3, skips[3])
 
     # add segmentation head to each
     s5 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage5')(p5)
     s4 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage4')(p4)
     s3 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage3')(p3)
-    s2 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage2')(p2)
+    # s2 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage2')(p2)
 
     # upsampling to same resolution
-    s5 = layers.UpSampling2D((8, 8), interpolation='bilinear', name='upsampling_stage5')(s5)
-    s4 = layers.UpSampling2D((4, 4), interpolation='bilinear', name='upsampling_stage4')(s4)
-    s3 = layers.UpSampling2D((2, 2), interpolation='bilinear', name='upsampling_stage3')(s3)
+    # s5 = layers.UpSampling2D((8, 8), interpolation='bilinear', name='upsampling_stage5')(s5)
+    # s4 = layers.UpSampling2D((4, 4), interpolation='bilinear', name='upsampling_stage4')(s4)
+    # s3 = layers.UpSampling2D((2, 2), interpolation='bilinear', name='upsampling_stage3')(s3)
+    s5 = layers.UpSampling2D((4, 4), interpolation='bilinear', name='upsampling_stage5')(s5)
+    s4 = layers.UpSampling2D((2, 2), interpolation='bilinear', name='upsampling_stage4')(s4)
 
     # aggregating results
     if aggregation == 'sum':
-        x = layers.Add(name='aggregation_sum')([s2, s3, s4, s5])
+        # x = layers.Add(name='aggregation_sum')([s2, s3, s4, s5])
+        x = layers.Add(name='aggregation_sum')([s3, s4, s5])
     elif aggregation == 'concat':
         concat_axis = 3 if backend.image_data_format() == 'channels_last' else 1
-        x = layers.Concatenate(axis=concat_axis, name='aggregation_concat')([s2, s3, s4, s5])
+        # x = layers.Concatenate(axis=concat_axis, name='aggregation_concat')([s2, s3, s4, s5])
+        x = layers.Concatenate(axis=concat_axis, name='aggregation_concat')([s3, s4, s5])
     else:
         raise ValueError('Aggregation parameter should be in ("sum", "concat"), '
                          'got {}'.format(aggregation))
@@ -213,7 +217,8 @@ def build_fpn(
 
     # final stage
     x = Conv3x3BnReLU(segmentation_filters, use_batchnorm, name='final_stage')(x)
-    x = layers.UpSampling2D(size=(2, 2), interpolation='bilinear', name='final_upsampling')(x)
+    # x = layers.UpSampling2D(size=(2, 2), interpolation='bilinear', name='final_upsampling')(x)
+    x = layers.UpSampling2D(size=(4, 4), interpolation='bilinear', name='final_upsampling')(x)
 
     return x
 
@@ -233,14 +238,17 @@ def build_uper_decoder(
         activation='softmax',
 ):
     input_ = backbone.input
-    ppm_input = backbone.output
+    output_ = backbone.output
+
+    ppm_input = output_[-1]
     ppm_output = build_ppm(
         ppm_input, psp_pooling_type, psp_conv_filters,
         pyramid_filters, psp_use_batchnorm)
 
     # building decoder blocks with skip connections
-    skips = ([backbone.get_layer(name=i).output if isinstance(i, str)
-              else backbone.get_layer(index=i).output for i in skip_connection_layers])
+    # skips = ([backbone.get_layer(name=i).output if isinstance(i, str)
+    #           else backbone.get_layer(index=i).output for i in skip_connection_layers])
+    skips = output_[:-1]
 
     fpn_output = build_fpn(
         ppm_output, skips, pyramid_filters, segmentation_filters, pyramid_use_batchnorm,
@@ -265,7 +273,7 @@ def build_uper_decoder(
 def UPerDecoder(
         backbone_name='vgg16',
         input_shape=(None, None, 3),
-        classes=21,
+        num_classes=21,
         activation='softmax',
         weights=None,
         encoder_weights='imagenet',
@@ -290,7 +298,6 @@ def UPerDecoder(
         backbone_name,
         input_shape=input_shape,
         weights=encoder_weights,
-        include_top=False,
         **kwargs
     )
 
@@ -308,7 +315,7 @@ def UPerDecoder(
         pyramid_use_batchnorm=pyramid_use_batchnorm,
         pyramid_dropout=pyramid_dropout,
         pyramid_aggregation=pyramid_aggregation,
-        classes=classes,
+        classes=num_classes,
         activation=activation,
     )
 

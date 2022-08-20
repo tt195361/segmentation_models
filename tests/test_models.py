@@ -139,8 +139,12 @@ def test_uper_decoder():
     backbone = 'SwinTransformer'
 
     _test_shape(
-        UPerDecoder, backbone,
-        input_shape=(3, 224, 224), encoder_weights=None)
+        UPerDecoder, backbone, input_shape=(224, 224, 3),
+        num_classes=1,
+        include_top=False,
+        pretrained=False,
+        use_tpu=False
+    )
 
 
 if __name__ == '__main__':
