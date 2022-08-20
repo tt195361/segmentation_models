@@ -12,8 +12,35 @@ from tensorflow.keras import Model, Sequential
 
 import tensorflow_addons as tfa
 
-from models.utils import *
+# from models.utils import *
+import collections
+from tensorflow.keras.layers import Dense, Layer
 
+def to_2tuple(x):
+    if isinstance(x, collections.abc.Iterable):
+        return x
+    return (x, x)
+
+
+class DropPath(Layer):
+    def __init__(self, prob):
+        super().__init__()
+        self.drop_prob = prob
+
+    def call(self, x, training=None):
+        if self.drop_prob == 0. or not training:
+            return x
+        keep_prob = 1 - self.drop_prob
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        random_tensor = tf.random.uniform(shape=shape)
+        random_tensor = tf.where(random_tensor < keep_prob, 1, 0)
+        output = x / keep_prob * random_tensor
+        return output
+
+
+class TruncatedDense(Dense):
+    def __init__(self, units, use_bias=True, initializer = tf.keras.initializers.TruncatedNormal(mean=0., stddev=.02)):
+        super().__init__(units, use_bias=use_bias, kernel_initializer=initializer)
 
 class Mlp(Layer):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=Activation(tf.nn.gelu), drop=0.):
@@ -487,7 +514,7 @@ class SwinTransformer(Model):
         self.embed_dim = embed_dim
         self.ape = ape
         self.patch_norm = patch_norm
-        self.num_features = int(embed_dim * 2 ** (self.num_layers - 1))
+        self.num_features = [int(embed_dim * 2 ** i) for i in range(self.num_layers)]
         self.mlp_ratio = mlp_ratio
 
         # split image into non-overlapping patches
@@ -511,6 +538,7 @@ class SwinTransformer(Model):
 
         # build layers
         self.sequence = Sequential(name="basic_layers_seq")
+        self.norm_layers = []
         for i_layer in range(self.num_layers):
             self.sequence.add(BasicLayer(dim=int(embed_dim * 2 ** i_layer),
                                          input_resolution=(patches_resolution[0] // (2 ** i_layer),
@@ -524,11 +552,12 @@ class SwinTransformer(Model):
                                          drop_path=dpr[sum(depths[:i_layer]):sum(depths[:i_layer + 1])],
                                          norm_layer=norm_layer,
                                          downsample=PatchMerging if (i_layer < self.num_layers - 1) else None))
+            self.norm_layers.append(norm_layer(epsilon=1e-5, name=f'norm{i_layer}'))
 
         # TODO: Check impact of epsilon
-        self.norm = norm_layer(epsilon=1e-5)
-        self.avgpool = tfa.layers.AdaptiveAveragePooling1D(1)
-        self.head = TruncatedDense(num_classes) if num_classes > 0 else tf.identity
+        # self.norm = norm_layer(epsilon=1e-5)
+        # self.avgpool = tfa.layers.AdaptiveAveragePooling1D(1)
+        # self.head = TruncatedDense(num_classes) if num_classes > 0 else tf.identity
 
     def forward_features(self, x):
         x = self.patch_embed(x)
@@ -536,16 +565,22 @@ class SwinTransformer(Model):
             x = x + self.absolute_pos_embed
         x = self.pos_drop(x)
 
-        x = self.sequence(x)
+        # x = self.sequence(x)
+        outs = []
+        for basic_layer, norm_layer in zip(self.sequence.layers, self.norm_layers):
+            x = basic_layer(x)
+            out = norm_layer(x)
+            outs.append(out)
+        return tuple(outs)
 
-        x = self.norm(x)  # B L C
-        x = tf.transpose(self.avgpool(x), perm=(0, 2, 1))  # B C 1
-        x = tf.reshape(x, [x.shape[0], -1])
-        return x
+        # x = self.norm(x)  # B L C
+        # x = tf.transpose(self.avgpool(x), perm=(0, 2, 1))  # B C 1
+        # x = tf.reshape(x, [x.shape[0], -1])
+        # return x
 
     def call(self, x):
         x = self.forward_features(x)
-        x = self.head(x)
+        # x = self.head(x)
         return x
 
     def flops(self):
@@ -553,6 +588,17 @@ class SwinTransformer(Model):
         flops += self.patch_embed.flops()
         for i, layer in enumerate(self.sequence):
             flops += layer.flops()
-        flops += self.num_features * self.patches_resolution[0] * self.patches_resolution[1] // (2 ** self.num_layers)
-        flops += self.num_features * self.num_classes
+        flops += self.num_features[-1] * self.patches_resolution[0] * self.patches_resolution[1] // (2 ** self.num_layers)
+        flops += self.num_features[-1] * self.num_classes
         return flops
+
+
+def make_swin_transformer(
+        input_shape=(3, 224, 224),
+        **kwargs,
+):
+    swin_transformer = SwinTransformer(**kwargs)
+    inputs = tf.keras.Input(shape=input_shape)
+    outputs = swin_transformer(inputs)
+    model = tf.keras.Model(inputs, outputs, name='swin_transformer')
+    return model

@@ -6,6 +6,7 @@ from . import inception_resnet_v2 as irv2
 from . import inception_v3 as iv3
 
 from .convnext import ConvNeXtBase
+from .swin_transformer import make_swin_transformer
 
 
 class BackbonesFactory(ModelsFactory):
@@ -92,6 +93,7 @@ class BackbonesFactory(ModelsFactory):
         'efficientnetb7': [eff.EfficientNetB7, eff.preprocess_input],
 
         'ConvNeXtBase': [ConvNeXtBase, None],
+        'SwinTransformer': [make_swin_transformer, None]
     }
 
     # currently not supported

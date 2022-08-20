@@ -294,8 +294,8 @@ def UPerDecoder(
         **kwargs
     )
 
-    if encoder_features == 'default':
-        encoder_features = Backbones.get_feature_layers(backbone_name, n=4)
+    # if encoder_features == 'default':
+    #     encoder_features = Backbones.get_feature_layers(backbone_name, n=4)
 
     model = build_uper_decoder(
         backbone,

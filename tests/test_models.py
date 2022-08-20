@@ -134,11 +134,13 @@ def test_fpn(backbone):
 
 
 def test_uper_decoder():
-    backbone = 'efficientnetb1'
-#    backbone = 'ConvNeXtBase'
+#     backbone = 'efficientnetb1'
+#     backbone = 'ConvNeXtBase'
+    backbone = 'SwinTransformer'
 
     _test_shape(
-        UPerDecoder, backbone, input_shape=(512, 512, 3), encoder_weights=None)
+        UPerDecoder, backbone,
+        input_shape=(3, 224, 224), encoder_weights=None)
 
 
 if __name__ == '__main__':
