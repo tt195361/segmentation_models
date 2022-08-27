@@ -296,7 +296,7 @@ class BasicLayer(tf.keras.layers.Layer):
                                            drop_path_prob=drop_path_prob[i] if isinstance(
                                                drop_path_prob, list) else drop_path_prob,
                                            norm_layer=norm_layer,
-                                           prefix=f'{prefix}/blocks{i}') for i in range(depth)], name="seq_swin_block")
+                                           prefix=f'{prefix}/blocks{i}') for i in range(depth)])
         if downsample is not None:
             self.downsample = downsample(
                 input_resolution, dim=dim, norm_layer=norm_layer, prefix=prefix)
@@ -307,8 +307,10 @@ class BasicLayer(tf.keras.layers.Layer):
         x = self.blocks(x)
 
         if self.downsample is not None:
-            x = self.downsample(x)
-        return x
+            x_down = self.downsample(x)
+            return x, x_down
+        else:
+            return x, x
 
 
 class PatchEmbed(tf.keras.layers.Layer):
@@ -384,38 +386,22 @@ class SwinTransformerModel(tf.keras.Model):
         dpr = [x for x in np.linspace(0., drop_path_rate, sum(depths))]
 
         # build layers
-        # self.basic_layers = tf.keras.Sequential([BasicLayer(dim=int(embed_dim * 2 ** i_layer),
-        #                                         input_resolution=(patches_resolution[0] // (2 ** i_layer),
-        #                                                           patches_resolution[1] // (2 ** i_layer)),
-        #                                         depth=depths[i_layer],
-        #                                         num_heads=num_heads[i_layer],
-        #                                         window_size=window_size,
-        #                                         mlp_ratio=self.mlp_ratio,
-        #                                         qkv_bias=qkv_bias, qk_scale=qk_scale,
-        #                                         drop=drop_rate, attn_drop=attn_drop_rate,
-        #                                         drop_path_prob=dpr[sum(depths[:i_layer]):sum(
-        #                                             depths[:i_layer + 1])],
-        #                                         norm_layer=norm_layer,
-        #                                         downsample=PatchMerging if (
-        #                                             i_layer < self.num_layers - 1) else None,
-        #                                         use_checkpoint=use_checkpoint,
-        #                                         prefix=f'layers{i_layer}') for i_layer in range(self.num_layers)])
-        self.basic_layers = [BasicLayer(dim=int(embed_dim * 2 ** i_layer),
-                                        input_resolution=(patches_resolution[0] // (2 ** i_layer),
-                                                          patches_resolution[1] // (2 ** i_layer)),
-                                        depth=depths[i_layer],
-                                        num_heads=num_heads[i_layer],
-                                        window_size=window_size,
-                                        mlp_ratio=self.mlp_ratio,
-                                        qkv_bias=qkv_bias, qk_scale=qk_scale,
-                                        drop=drop_rate, attn_drop=attn_drop_rate,
-                                        drop_path_prob=dpr[sum(depths[:i_layer]):sum(
-                                            depths[:i_layer + 1])],
-                                        norm_layer=norm_layer,
-                                        downsample=PatchMerging if (
-                                            i_layer < self.num_layers - 1) else None,
-                                        use_checkpoint=use_checkpoint,
-                                        prefix=f'layers{i_layer}') for i_layer in range(self.num_layers)]
+        self.basic_layers = tf.keras.Sequential([BasicLayer(dim=int(embed_dim * 2 ** i_layer),
+                                                input_resolution=(patches_resolution[0] // (2 ** i_layer),
+                                                                  patches_resolution[1] // (2 ** i_layer)),
+                                                depth=depths[i_layer],
+                                                num_heads=num_heads[i_layer],
+                                                window_size=window_size,
+                                                mlp_ratio=self.mlp_ratio,
+                                                qkv_bias=qkv_bias, qk_scale=qk_scale,
+                                                drop=drop_rate, attn_drop=attn_drop_rate,
+                                                drop_path_prob=dpr[sum(depths[:i_layer]):sum(
+                                                    depths[:i_layer + 1])],
+                                                norm_layer=norm_layer,
+                                                downsample=PatchMerging if (
+                                                    i_layer < self.num_layers - 1) else None,
+                                                use_checkpoint=use_checkpoint,
+                                                prefix=f'layers{i_layer}') for i_layer in range(self.num_layers)])
         # self.norm = norm_layer(epsilon=1e-5, name='norm')
         # self.avgpool = GlobalAveragePooling1D()
         # if self.include_top:
@@ -427,8 +413,7 @@ class SwinTransformerModel(tf.keras.Model):
         for i_layer in range(self.num_layers):
             self.norm_layers.append(norm_layer(epsilon=1e-5, name=f'norm{i_layer}'))
 
-        # self.num_features = [int(embed_dim * 2 ** i) for i in range(self.num_layers)]
-        self.num_features = [48, 96, 192, 768]
+        self.num_features = [int(embed_dim * 2 ** i) for i in range(self.num_layers)]
 
     def forward_features(self, x):
         x = self.patch_embed(x)
@@ -443,17 +428,16 @@ class SwinTransformerModel(tf.keras.Model):
 
         outs = []
         for basic_layer, norm_layer, num_features in \
-                zip(self.basic_layers, self.norm_layers, self.num_features):
-            x = basic_layer(x)
+                zip(self.basic_layers.layers, self.norm_layers, self.num_features):
+            x_out, x = basic_layer(x)
 
-            _, L, C = x.get_shape().as_list()
-            F = (L * C) // num_features
+            _, F, _ = x_out.get_shape().as_list()
             F = tf.cast(F, dtype=tf.float32)
             W = tf.math.sqrt(F)
             W = tf.cast(W, dtype=tf.int32)
 
-            out = norm_layer(x)
-            out = tf.reshape(out, [-1, W, W, num_features])
+            x_out = norm_layer(x_out)
+            out = tf.reshape(x_out, [-1, W, W, num_features])
             outs.append(out)
         return tuple(outs)
 
