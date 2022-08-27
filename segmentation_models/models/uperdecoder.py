@@ -103,7 +103,7 @@ def SpatialContextBlock(
 
         x = Pooling2D(pool_size, strides=pool_size, padding='same', name=pooling_name)(input_tensor)
         x = Resizing(height, width, name=resizing_name)(x)
-        x = Conv3x3BnReLU(conv_filters, use_batchnorm, name=conv_block_name)(x)
+        x = Conv1x1BnReLU(conv_filters, use_batchnorm, name=conv_block_name)(x)
         return x
 
     return wrapper
@@ -188,10 +188,13 @@ def build_fpn(
     # p2 = FPNBlock(pyramid_filters, stage=2)(p3, skips[3])
 
     # add segmentation head to each
-    s5 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage5')(p5)
-    s4 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage4')(p4)
-    s3 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage3')(p3)
+    # s5 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage5')(p5)
+    # s4 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage4')(p4)
+    # s3 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage3')(p3)
     # s2 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage2')(p2)
+    s5 = p5
+    s4 = p4
+    s3 = p3
 
     # upsampling to same resolution
     # s5 = layers.UpSampling2D((8, 8), interpolation='bilinear', name='upsampling_stage5')(s5)
