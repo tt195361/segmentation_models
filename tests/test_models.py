@@ -133,15 +133,14 @@ def test_fpn(backbone):
         FPN, backbone, input_shape=(256, 256, 4), encoder_weights=None)
 
 
-def test_uper_decoder():
+def test_swin_transformer():
 #     backbone = 'efficientnetb1'
 #     backbone = 'ConvNeXtBase'
     backbone = 'SwinTransformer'
 
     _test_shape(
-        UPerDecoder, backbone, input_shape=(224, 224, 3),
+        FPN, backbone, input_shape=(224, 224, 3),
         num_classes=1,
-        include_top=False,
         pretrained=False,
         use_tpu=False
     )
