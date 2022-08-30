@@ -251,7 +251,8 @@ def ConvNeXtBlock(
             filters=projection_dim,
             kernel_size=7,
             padding="same",
-            groups=projection_dim,
+            # groups=projection_dim,
+            groups=1,
             name=name + "_depthwise_conv",
         )(x)
         x = layers.LayerNormalization(epsilon=1e-6, name=name + "_layernorm")(x)
@@ -403,7 +404,7 @@ def ConvNeXt(
             " as true, `classes` should be 1000"
         )
 
-    # # Determine proper input shape.
+    # Determine proper input shape.
     # input_shape = imagenet_utils.obtain_input_shape(
     #     input_shape,
     #     default_size=default_size,
@@ -484,6 +485,7 @@ def ConvNeXt(
     # First apply downsampling blocks and then apply ConvNeXt stages.
     cur = 0
 
+    outputs = []
     num_convnext_blocks = 4
     for i in range(num_convnext_blocks):
         x = downsample_layers[i](x)
@@ -494,6 +496,12 @@ def ConvNeXt(
                 layer_scale_init_value=layer_scale_init_value,
                 name=model_name + f"_stage_{i}_block_{j}",
             )(x)
+
+        x_out = layers.LayerNormalization(
+            epsilon=1e-6,
+            name=model_name + "_out_layernorm_" + str(i),
+        )(x)
+        outputs.append(x_out)
         cur += depths[i]
 
     if include_top:
@@ -507,7 +515,8 @@ def ConvNeXt(
             x = layers.GlobalMaxPooling2D()(x)
         x = layers.LayerNormalization(epsilon=1e-6)(x)
 
-    model = training_lib.Model(inputs=inputs, outputs=x, name=model_name)
+    # model = training_lib.Model(inputs=inputs, outputs=x, name=model_name)
+    model = training_lib.Model(inputs=inputs, outputs=outputs, name=model_name)
 
     # Load weights.
     if weights == "imagenet":
@@ -549,6 +558,7 @@ def ConvNeXtTiny(
     pooling=None,
     classes=1000,
     classifier_activation="softmax",
+    **kwargs,
 ):
     return ConvNeXt(
         depths=MODEL_CONFIGS["tiny"]["depths"],
@@ -582,6 +592,7 @@ def ConvNeXtSmall(
     pooling=None,
     classes=1000,
     classifier_activation="softmax",
+    **kwargs,
 ):
     return ConvNeXt(
         depths=MODEL_CONFIGS["small"]["depths"],
@@ -649,6 +660,7 @@ def ConvNeXtLarge(
     pooling=None,
     classes=1000,
     classifier_activation="softmax",
+    **kwargs,
 ):
     return ConvNeXt(
         depths=MODEL_CONFIGS["large"]["depths"],
@@ -682,6 +694,7 @@ def ConvNeXtXLarge(
     pooling=None,
     classes=1000,
     classifier_activation="softmax",
+    **kwargs,
 ):
     return ConvNeXt(
         depths=MODEL_CONFIGS["xlarge"]["depths"],
