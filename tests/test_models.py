@@ -9,7 +9,7 @@ from segmentation_models import Unet
 from segmentation_models import Linknet
 from segmentation_models import PSPNet
 from segmentation_models import FPN
-from segmentation_models import UPerDecoder
+from segmentation_models import UPerDecoder2
 from segmentation_models import get_available_backbone_names
 
 if sm.framework() == sm._TF_KERAS_FRAMEWORK_NAME:
@@ -133,18 +133,13 @@ def test_fpn(backbone):
         FPN, backbone, input_shape=(256, 256, 4), encoder_weights=None)
 
 
-def test_swin_transformer():
-    # backbone = 'efficientnetb1'
-    backbone = 'ConvNeXtSmall'
-    # backbone = 'SwinTransformer'
+def test_uper_decoder2():
+    backbone = 'efficientnetb1'
 
     _test_shape(
-        FPN, backbone, input_shape=(224, 224, 3),
-        include_preprocessing=False,
+        UPerDecoder2, backbone, input_shape=(512, 512, 3),
         encoder_weights=None,
-        classes=1,
-        pretrained=False,
-        use_tpu=False
+        num_classes=1,
     )
 
 
