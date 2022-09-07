@@ -143,5 +143,13 @@ def test_uper_decoder2():
     )
 
 
+def test_pspnet2():
+    backbone = 'efficientnetb1'
+
+    _test_shape(
+        PSPNet, backbone, input_shape=(384, 384, 4),
+        encoder_weights=None, downsample_factor=32)
+
+
 if __name__ == '__main__':
     pytest.main([__file__])

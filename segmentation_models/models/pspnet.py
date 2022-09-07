@@ -113,8 +113,11 @@ def build_psp(
         dropout=None,
 ):
     input_ = backbone.input
-    x = (backbone.get_layer(name=psp_layer_idx).output if isinstance(psp_layer_idx, str)
-         else backbone.get_layer(index=psp_layer_idx).output)
+    if psp_layer_idx < 0:
+        x = backbone.output
+    else:
+        x = (backbone.get_layer(name=psp_layer_idx).output if isinstance(psp_layer_idx, str)
+             else backbone.get_layer(index=psp_layer_idx).output)
 
     # build spatial pyramid
     x1 = SpatialContextBlock(1, conv_filters, pooling_type, use_batchnorm)(x)
@@ -213,7 +216,9 @@ def PSPNet(
 
     feature_layers = Backbones.get_feature_layers(backbone_name, n=3)
 
-    if downsample_factor == 16:
+    if downsample_factor == 32:
+        psp_layer_idx = -1
+    elif downsample_factor == 16:
         psp_layer_idx = feature_layers[0]
     elif downsample_factor == 8:
         psp_layer_idx = feature_layers[1]
