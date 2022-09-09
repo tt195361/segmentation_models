@@ -9,7 +9,7 @@ from segmentation_models import Unet
 from segmentation_models import Linknet
 from segmentation_models import PSPNet
 from segmentation_models import FPN
-from segmentation_models import UPerDecoder2
+from segmentation_models import PSP_FPN
 from segmentation_models import get_available_backbone_names
 
 if sm.framework() == sm._TF_KERAS_FRAMEWORK_NAME:
@@ -133,13 +133,13 @@ def test_fpn(backbone):
         FPN, backbone, input_shape=(256, 256, 4), encoder_weights=None)
 
 
-def test_uper_decoder2():
+def test_psp_fpn():
     backbone = 'efficientnetb1'
 
     _test_shape(
-        UPerDecoder2, backbone, input_shape=(512, 512, 3),
+        PSP_FPN, backbone, input_shape=(384, 384, 3),
         encoder_weights=None,
-        num_classes=1,
+        classes=1,
     )
 
 

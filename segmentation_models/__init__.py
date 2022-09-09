@@ -113,15 +113,13 @@ from .models.unet import Unet as _Unet
 from .models.pspnet import PSPNet as _PSPNet
 from .models.linknet import Linknet as _Linknet
 from .models.fpn import FPN as _FPN
-from .models.uperdecoder import UPerDecoder as _UPerDecoder
-from .models.uperdecoder2 import UPerDecoder2 as _UPerDecoder2
+from .models.psp_fpn import PSP_FPN as _PSP_FPN
 
 Unet = inject_global_submodules(_Unet)
 PSPNet = inject_global_submodules(_PSPNet)
 Linknet = inject_global_submodules(_Linknet)
 FPN = inject_global_submodules(_FPN)
-UPerDecoder = inject_global_submodules(_UPerDecoder)
-UPerDecoder2 = inject_global_submodules(_UPerDecoder2)
+PSP_FPN = inject_global_submodules(_PSP_FPN)
 get_available_backbone_names = Backbones.models_names
 
 
@@ -137,7 +135,7 @@ def get_preprocessing(name):
 
 
 __all__ = [
-    'Unet', 'PSPNet', 'FPN', 'Linknet', 'UPerDecoder', 'UPerDecoder2',
+    'Unet', 'PSPNet', 'FPN', 'Linknet', 'PSP_FPN',
     'set_framework', 'framework',
     'get_preprocessing', 'get_available_backbone_names',
     'losses', 'metrics', 'utils',
