@@ -14,23 +14,28 @@ def build_psp(
         conv_filters=512,
         use_batchnorm=True,
         dropout=None,
+        no=0,
 ):
     x = psp_inpput
 
     # build spatial pyramid
-    x1 = SpatialContextBlock(1, conv_filters, pooling_type, use_batchnorm)(x)
-    x2 = SpatialContextBlock(2, conv_filters, pooling_type, use_batchnorm)(x)
-    x3 = SpatialContextBlock(3, conv_filters, pooling_type, use_batchnorm)(x)
-    x6 = SpatialContextBlock(6, conv_filters, pooling_type, use_batchnorm)(x)
+    x1 = SpatialContextBlock(no + 1, conv_filters, pooling_type, use_batchnorm)(x)
+    x2 = SpatialContextBlock(no + 2, conv_filters, pooling_type, use_batchnorm)(x)
+    x3 = SpatialContextBlock(no + 3, conv_filters, pooling_type, use_batchnorm)(x)
+    x6 = SpatialContextBlock(no + 6, conv_filters, pooling_type, use_batchnorm)(x)
+
+    psp_concat_name = f'psp_concat_{no}'
+    aggregation_name = f'aggregation_{no}'
+    spatial_dropout_name = f'spatial_dropout_{no}'
 
     # aggregate spatial pyramid
     concat_axis = 3 if backend.image_data_format() == 'channels_last' else 1
-    x = layers.Concatenate(axis=concat_axis, name='psp_concat')([x, x1, x2, x3, x6])
-    x = Conv1x1BnReLU(conv_filters, use_batchnorm, name='aggregation')(x)
+    x = layers.Concatenate(axis=concat_axis, name=psp_concat_name)([x, x1, x2, x3, x6])
+    x = Conv1x1BnReLU(conv_filters, use_batchnorm, name=aggregation_name)(x)
 
     # model regularization
     if dropout is not None:
-        x = layers.SpatialDropout2D(dropout, name='spatial_dropout')(x)
+        x = layers.SpatialDropout2D(dropout, name=spatial_dropout_name)(x)
 
     return x
 
@@ -117,14 +122,22 @@ def build_psp_fpn(
     psp_input = output_
     psp_output = build_psp(
         psp_input, psp_pooling_type, psp_conv_filters,
-        psp_use_batchnorm, pyramid_dropout)
+        psp_use_batchnorm, pyramid_dropout, 0)
 
     # building decoder blocks with skip connections
     skips = ([backbone.get_layer(name=i).output if isinstance(i, str)
               else backbone.get_layer(index=i).output for i in skip_connection_layers])
 
+    psp_skips = []
+    for i, skip in enumerate(skips):
+        no = (i + 1) * 10
+        psp_skip = build_psp(
+            skip, psp_pooling_type, psp_conv_filters,
+            psp_use_batchnorm, pyramid_dropout, no)
+        psp_skips.append(psp_skip)
+
     fpn_output = build_fpn(
-        psp_output, skips, pyramid_filters, segmentation_filters, classes, activation,
+        psp_output, psp_skips, pyramid_filters, segmentation_filters, classes, activation,
         pyramid_use_batchnorm, pyramid_aggregation, pyramid_dropout)
 
     # create keras model instance
