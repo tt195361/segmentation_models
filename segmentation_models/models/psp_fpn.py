@@ -14,28 +14,23 @@ def build_psp(
         conv_filters=512,
         use_batchnorm=True,
         dropout=None,
-        no=0,
 ):
     x = psp_inpput
 
     # build spatial pyramid
-    x1 = SpatialContextBlock(no + 1, conv_filters, pooling_type, use_batchnorm)(x)
-    x2 = SpatialContextBlock(no + 2, conv_filters, pooling_type, use_batchnorm)(x)
-    x3 = SpatialContextBlock(no + 3, conv_filters, pooling_type, use_batchnorm)(x)
-    x6 = SpatialContextBlock(no + 6, conv_filters, pooling_type, use_batchnorm)(x)
-
-    psp_concat_name = f'psp_concat_{no}'
-    aggregation_name = f'aggregation_{no}'
-    spatial_dropout_name = f'spatial_dropout_{no}'
+    x1 = SpatialContextBlock(1, conv_filters, pooling_type, use_batchnorm)(x)
+    x2 = SpatialContextBlock(2, conv_filters, pooling_type, use_batchnorm)(x)
+    x3 = SpatialContextBlock(3, conv_filters, pooling_type, use_batchnorm)(x)
+    x6 = SpatialContextBlock(6, conv_filters, pooling_type, use_batchnorm)(x)
 
     # aggregate spatial pyramid
     concat_axis = 3 if backend.image_data_format() == 'channels_last' else 1
-    x = layers.Concatenate(axis=concat_axis, name=psp_concat_name)([x, x1, x2, x3, x6])
-    x = Conv1x1BnReLU(conv_filters, use_batchnorm, name=aggregation_name)(x)
+    x = layers.Concatenate(axis=concat_axis, name='psp_concat')([x, x1, x2, x3, x6])
+    x = Conv1x1BnReLU(conv_filters, use_batchnorm, name='aggregation')(x)
 
     # model regularization
     if dropout is not None:
-        x = layers.SpatialDropout2D(dropout, name=spatial_dropout_name)(x)
+        x = layers.SpatialDropout2D(dropout, name='spatial_dropout')(x)
 
     return x
 
@@ -55,28 +50,38 @@ def build_fpn(
     skips = skip_connection_layers
 
     # build FPN pyramid
-    p5 = FPNBlock(pyramid_filters, stage=5)(x, skips[0])
+    # p5 = FPNBlock(pyramid_filters, stage=5)(x, skips[0])
+    # p4 = FPNBlock(pyramid_filters, stage=4)(p5, skips[1])
+    # p3 = FPNBlock(pyramid_filters, stage=3)(p4, skips[2])
+    # p2 = FPNBlock(pyramid_filters, stage=2)(p3, skips[3])
+    p5 = FPNBlock(pyramid_filters, stage=5)(x, skips[2])
     p4 = FPNBlock(pyramid_filters, stage=4)(p5, skips[1])
-    p3 = FPNBlock(pyramid_filters, stage=3)(p4, skips[2])
-    p2 = FPNBlock(pyramid_filters, stage=2)(p3, skips[3])
+    p3 = FPNBlock(pyramid_filters, stage=3)(p4, skips[0])
 
     # add segmentation head to each
     s5 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage5')(p5)
     s4 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage4')(p4)
     s3 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage3')(p3)
-    s2 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage2')(p2)
+    # s2 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage2')(p2)
 
     # upsampling to same resolution
-    s5 = layers.UpSampling2D((8, 8), interpolation='nearest', name='upsampling_stage5')(s5)
-    s4 = layers.UpSampling2D((4, 4), interpolation='nearest', name='upsampling_stage4')(s4)
-    s3 = layers.UpSampling2D((2, 2), interpolation='nearest', name='upsampling_stage3')(s3)
+    # s5 = layers.UpSampling2D((8, 8), interpolation='nearest', name='upsampling_stage5')(s5)
+    # s4 = layers.UpSampling2D((4, 4), interpolation='nearest', name='upsampling_stage4')(s4)
+    # s3 = layers.UpSampling2D((2, 2), interpolation='nearest', name='upsampling_stage3')(s3)
+    s5 = layers.UpSampling2D((4, 4), interpolation='nearest', name='upsampling_stage5')(s5)
+    s4 = layers.UpSampling2D((2, 2), interpolation='nearest', name='upsampling_stage4')(s4)
 
     # aggregating results
+    # if aggregation == 'sum':
+    #     x = layers.Add(name='aggregation_sum')([s2, s3, s4, s5])
+    # elif aggregation == 'concat':
+    #     concat_axis = 3 if backend.image_data_format() == 'channels_last' else 1
+    #     x = layers.Concatenate(axis=concat_axis, name='aggregation_concat')([s2, s3, s4, s5])
     if aggregation == 'sum':
-        x = layers.Add(name='aggregation_sum')([s2, s3, s4, s5])
+        x = layers.Add(name='aggregation_sum')([s3, s4, s5])
     elif aggregation == 'concat':
         concat_axis = 3 if backend.image_data_format() == 'channels_last' else 1
-        x = layers.Concatenate(axis=concat_axis, name='aggregation_concat')([s2, s3, s4, s5])
+        x = layers.Concatenate(axis=concat_axis, name='aggregation_concat')([s3, s4, s5])
     else:
         raise ValueError('Aggregation parameter should be in ("sum", "concat"), '
                          'got {}'.format(aggregation))
@@ -86,7 +91,8 @@ def build_fpn(
 
     # final stage
     x = Conv3x3BnReLU(segmentation_filters, use_batchnorm, name='final_stage')(x)
-    x = layers.UpSampling2D(size=(2, 2), interpolation='bilinear', name='final_upsampling')(x)
+    # x = layers.UpSampling2D(size=(2, 2), interpolation='bilinear', name='final_upsampling')(x)
+    x = layers.UpSampling2D(size=(4, 4), interpolation='bilinear', name='final_upsampling')(x)
 
     # model head (define number of output classes)
     x = layers.Conv2D(
@@ -119,25 +125,18 @@ def build_psp_fpn(
     input_ = backbone.input
     output_ = backbone.output
 
-    psp_input = output_
+    psp_input = output_[-1]
     psp_output = build_psp(
         psp_input, psp_pooling_type, psp_conv_filters,
-        psp_use_batchnorm, pyramid_dropout, 0)
+        psp_use_batchnorm, pyramid_dropout)
 
-    # building decoder blocks with skip connections
-    skips = ([backbone.get_layer(name=i).output if isinstance(i, str)
-              else backbone.get_layer(index=i).output for i in skip_connection_layers])
-
-    psp_skips = []
-    for i, skip in enumerate(skips):
-        no = (i + 1) * 10
-        psp_skip = build_psp(
-            skip, psp_pooling_type, psp_conv_filters,
-            psp_use_batchnorm, pyramid_dropout, no)
-        psp_skips.append(psp_skip)
+    # # building decoder blocks with skip connections
+    # skips = ([backbone.get_layer(name=i).output if isinstance(i, str)
+    #           else backbone.get_layer(index=i).output for i in skip_connection_layers])
+    skips = output_[:-1]
 
     fpn_output = build_fpn(
-        psp_output, psp_skips, pyramid_filters, segmentation_filters, classes, activation,
+        psp_output, skips, pyramid_filters, segmentation_filters, classes, activation,
         pyramid_use_batchnorm, pyramid_aggregation, pyramid_dropout)
 
     # create keras model instance
@@ -178,8 +177,8 @@ def PSP_FPN(
         **kwargs
     )
 
-    if encoder_features == 'default':
-        encoder_features = Backbones.get_feature_layers(backbone_name, n=4)
+    # if encoder_features == 'default':
+    #     encoder_features = Backbones.get_feature_layers(backbone_name, n=4)
 
     model = build_psp_fpn(
         backbone,
