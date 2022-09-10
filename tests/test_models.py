@@ -151,5 +151,16 @@ def test_pspnet2():
         encoder_weights=None, downsample_factor=32)
 
 
+def test_swin_transformer():
+    backbone = 'SwinTransformer'
+
+    _test_shape(
+        PSP_FPN, backbone, input_shape=(384, 384, 3),
+        model_name='swin_base_384',
+        encoder_weights=None,
+        num_classes=1,
+    )
+
+
 if __name__ == '__main__':
     pytest.main([__file__])
