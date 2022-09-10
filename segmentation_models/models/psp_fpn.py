@@ -192,3 +192,4 @@ def PSP_FPN(
         model.load_weights(weights)
 
     return model
+
