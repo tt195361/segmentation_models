@@ -137,7 +137,7 @@ def test_psp_fpn():
     backbone = 'efficientnetb1'
 
     _test_shape(
-        PSP_FPN, backbone, input_shape=(256, 256, 3),
+        PSP_FPN, backbone, input_shape=(320, 320, 3),
         encoder_weights=None,
         classes=1,
     )

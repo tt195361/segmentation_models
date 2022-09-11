@@ -31,8 +31,13 @@ def build_psp(
         x2 = SpatialContextBlock(2, conv_filters, pooling_type, use_batchnorm)(x)
         x3 = SpatialContextBlock(4, conv_filters, pooling_type, use_batchnorm)(x)
         x6 = SpatialContextBlock(8, conv_filters, pooling_type, use_batchnorm)(x)
+    elif h % 10 == 0:
+        x1 = SpatialContextBlock(1, conv_filters, pooling_type, use_batchnorm)(x)
+        x2 = SpatialContextBlock(2, conv_filters, pooling_type, use_batchnorm)(x)
+        x3 = SpatialContextBlock(5, conv_filters, pooling_type, use_batchnorm)(x)
+        x6 = SpatialContextBlock(10, conv_filters, pooling_type, use_batchnorm)(x)
     else:
-        ValueError(f'Unsupported image height {h}, not divisible by 6 or 8.')
+        ValueError(f'Unsupported image size {h}, not divisible by 6, 8, or 10.')
 
     # aggregate spatial pyramid
     concat_axis = 3 if backend.image_data_format() == 'channels_last' else 1
