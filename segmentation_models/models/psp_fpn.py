@@ -9,19 +9,30 @@ from .fpn import FPNBlock, DoubleConv3x3BnReLU, Conv3x3BnReLU
 
 
 def build_psp(
-        psp_inpput,
+        psp_input,
         pooling_type='avg',
         conv_filters=512,
         use_batchnorm=True,
         dropout=None,
 ):
-    x = psp_inpput
+    x = psp_input
+
+    input_shape = psp_input.shape
+    h = input_shape[1]
 
     # build spatial pyramid
-    x1 = SpatialContextBlock(1, conv_filters, pooling_type, use_batchnorm)(x)
-    x2 = SpatialContextBlock(2, conv_filters, pooling_type, use_batchnorm)(x)
-    x3 = SpatialContextBlock(3, conv_filters, pooling_type, use_batchnorm)(x)
-    x6 = SpatialContextBlock(6, conv_filters, pooling_type, use_batchnorm)(x)
+    if h % 6 == 0:
+        x1 = SpatialContextBlock(1, conv_filters, pooling_type, use_batchnorm)(x)
+        x2 = SpatialContextBlock(2, conv_filters, pooling_type, use_batchnorm)(x)
+        x3 = SpatialContextBlock(3, conv_filters, pooling_type, use_batchnorm)(x)
+        x6 = SpatialContextBlock(6, conv_filters, pooling_type, use_batchnorm)(x)
+    elif h % 8 == 0:
+        x1 = SpatialContextBlock(1, conv_filters, pooling_type, use_batchnorm)(x)
+        x2 = SpatialContextBlock(2, conv_filters, pooling_type, use_batchnorm)(x)
+        x3 = SpatialContextBlock(4, conv_filters, pooling_type, use_batchnorm)(x)
+        x6 = SpatialContextBlock(8, conv_filters, pooling_type, use_batchnorm)(x)
+    else:
+        ValueError(f'Unsupported image height {h}, not divisible by 6 or 8.')
 
     # aggregate spatial pyramid
     concat_axis = 3 if backend.image_data_format() == 'channels_last' else 1
