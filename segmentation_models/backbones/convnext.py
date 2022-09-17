@@ -219,6 +219,81 @@ class LayerScale(layers.Layer):
         return config
 
 
+class GroupConv2d(layers.Layer):
+    def __init__(
+            self,
+            filters,
+            kernel_size,
+            padding,
+            groups,
+            base_name,
+            **kwargs,
+        ):
+        super().__init__(**kwargs)
+        self.filters = filters
+        self.kernel_size = kernel_size
+        self.padding = padding
+        self.groups = groups
+        self.base_name = base_name
+
+    def build(self, input_shape):
+        self.convs_1 = []
+        for i in range(self.groups):
+            name1 = f"{self.base_name}_gc_conv1_{i}"
+            conv1 = layers.Conv2D(
+                filters=4, kernel_size=1, strides=1,
+                padding=self.padding, name=name1)
+            self.convs_1.append(conv1)
+
+        self.convs_2 = []
+        for i in range(self.groups):
+            name2 = f"{self.base_name}_gc_conv2_{i}"
+            conv2 = layers.Conv2D(
+                filters=4, kernel_size=self.kernel_size, strides=1,
+                padding=self.padding, name=name2)
+            self.convs_2.append(conv2)
+
+        self.convs_3 = []
+        for i in range(self.groups):
+            name3 = f"{self.base_name}_gc_conv3_{i}"
+            conv3 = layers.Conv2D(
+                filters=self.filters, kernel_size=1, strides=1,
+                padding=self.padding, name=name3)
+            self.convs_3.append(conv3)
+
+        name_add_1 = f"{self.base_name}_gc_add_1"
+        self.add_1 = layers.Add(name=name_add_1)
+        name_add_2 = f"{self.base_name}_gc_add_2"
+        self.add_2 = layers.Add(name=name_add_2)
+
+    def call(self, x):
+        input = x
+
+        outputs = []
+        for conv_1, conv_2, conv_3 in zip(self.convs_1, self.convs_2, self.convs_3):
+            x_out = conv_1(x)
+            x_out = conv_2(x_out)
+            x_out = conv_3(x_out)
+            outputs.append(x_out)
+
+        x_out = self.add_1(outputs)
+        x_out = self.add_2([x_out, input])
+        return x_out
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "filters": self.filters,
+                "kernel_size": self.kernel_size,
+                "padding": self.padding,
+                "groups": self.groups,
+                "base_name": self.base_name,
+            }
+        )
+        return config
+
+
 def ConvNeXtBlock(
     projection_dim, drop_path_rate=0.0, layer_scale_init_value=1e-6, name=None
 ):
@@ -247,13 +322,20 @@ def ConvNeXtBlock(
     def apply(inputs):
         x = inputs
 
-        x = layers.Conv2D(
+        # x = layers.Conv2D(
+        #     filters=projection_dim,
+        #     kernel_size=7,
+        #     padding="same",
+        #     # groups=projection_dim,
+        #     groups=1,
+        #     name=name + "_depthwise_conv",
+        # )(x)
+        x = GroupConv2d(
             filters=projection_dim,
             kernel_size=7,
             padding="same",
-            # groups=projection_dim,
-            groups=1,
-            name=name + "_depthwise_conv",
+            groups=projection_dim,
+            base_name=name + "_depthwise_conv",
         )(x)
         x = layers.LayerNormalization(epsilon=1e-6, name=name + "_layernorm")(x)
         x = layers.Dense(4 * projection_dim, name=name + "_pointwise_conv_1")(x)

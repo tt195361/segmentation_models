@@ -162,5 +162,15 @@ def test_swin_transformer():
     )
 
 
+def test_convnext():
+    backbone = 'ConvNeXtSmall'
+
+    _test_shape(
+        FPN, backbone, input_shape=(224, 224, 3),
+        include_preprocessing=False,
+        encoder_weights=None,
+        classes=1,
+    )
+
 if __name__ == '__main__':
     pytest.main([__file__])
