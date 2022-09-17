@@ -219,66 +219,112 @@ class LayerScale(layers.Layer):
         return config
 
 
-class GroupConv2d(layers.Layer):
+# https://medium.com/@krzechowski/custom-group-convolution-for-tensorflow-2-fc74a83189ce
+from tensorflow.python.keras.utils import conv_utils
+import tensorflow.keras.activations as activations
+import tensorflow.keras.regularizers as regularizers
+import tensorflow.keras.initializers as initializers
+import tensorflow.keras.constraints as constraints
+
+class GroupConv2d(tf.keras.layers.Layer):
     def __init__(
             self,
-            filters,
-            kernel_size,
-            padding,
-            groups,
-            base_name,
-            **kwargs,
-        ):
-        super().__init__(**kwargs)
+            filters: int,
+            kernel_size: tuple,
+            groups: int = 1,
+            strides: tuple = 1,
+            padding: str = 'VALID',
+            data_format: str = None,
+            dilation_rate: int = 1,
+            activation: str = None,
+            use_bias: bool = True,
+            kernel_initializer: str = 'glorot_uniform',
+            bias_initializer: str = 'zeros',
+            kernel_regularizer: str = None,
+            bias_regularizer: str = None,
+            activity_regularizer: str = None,
+            kernel_constraint=None,
+            bias_constraint=None,
+            rank: int = 2, **kwargs):
+        super().__init__(activity_regularizer=activity_regularizer, **kwargs)
         self.filters = filters
-        self.kernel_size = kernel_size
-        self.padding = padding
+        self.kernel_size = conv_utils.normalize_tuple(kernel_size, rank, 'kernel_size')
+        self.strides = conv_utils.normalize_tuple(strides, rank, 'strides')
         self.groups = groups
-        self.base_name = base_name
+        self.padding = padding
+        self.data_format = data_format
+        self.dilation_rate = conv_utils.normalize_tuple(dilation_rate, rank, 'dilation_rate')
+        self.in_channels = None
+        self.activation = activations.get(activation)
+        self.use_bias = use_bias
+        self.kernel_initializer = initializers.get(kernel_initializer)
+        self.bias_initializer = initializers.get(bias_initializer)
+        self.kernel_regularizer = regularizers.get(kernel_regularizer)
+        self.bias_regularizer = regularizers.get(bias_regularizer)
+        self.kernel_constraint = constraints.get(kernel_constraint)
+        self.bias_constraint = constraints.get(bias_constraint)
+        assert filters % groups == 0, "nuber of filters %r is not dividable by nuber of groups: %r" % (
+        filters, groups)
 
-    def build(self, input_shape):
-        self.convs_1 = []
-        for i in range(self.groups):
-            name1 = f"{self.base_name}_gc_conv1_{i}"
-            conv1 = layers.Conv2D(
-                filters=4, kernel_size=1, strides=1,
-                padding=self.padding, name=name1)
-            self.convs_1.append(conv1)
+        if self.in_channels:
+            self.build(None)
+            self._built = True
 
-        self.convs_2 = []
-        for i in range(self.groups):
-            name2 = f"{self.base_name}_gc_conv2_{i}"
-            conv2 = layers.Conv2D(
-                filters=4, kernel_size=self.kernel_size, strides=1,
-                padding=self.padding, name=name2)
-            self.convs_2.append(conv2)
+    def build(self, inputs_shape):
+        if self.data_format == 'channels_last':
+            self.data_format = 'NHWC'
+            if self.in_channels is None:
+                self.in_channels = inputs_shape[-1]
+        elif self.data_format == 'channels_first':
+            self.data_format = 'NCHW'
+            if self.in_channels is None:
+                self.in_channels = inputs_shape[1]
+        else:
+            raise Exception("data_format should be either channels_last or channels_first")
 
-        self.convs_3 = []
-        for i in range(self.groups):
-            name3 = f"{self.base_name}_gc_conv3_{i}"
-            conv3 = layers.Conv2D(
-                filters=self.filters, kernel_size=1, strides=1,
-                padding=self.padding, name=name3)
-            self.convs_3.append(conv3)
+        self.groupConv = lambda i, k: tf.nn.conv2d(
+            i, k, strides=self.strides, padding=self.padding, data_format=self.data_format,
+            dilations=self.dilation_rate, name=self.name
+        )
 
-        name_add_1 = f"{self.base_name}_gc_add_1"
-        self.add_1 = layers.Add(name=name_add_1)
-        name_add_2 = f"{self.base_name}_gc_add_2"
-        self.add_2 = layers.Add(name=name_add_2)
+        self.filter_shape = (
+            self.kernel_size[0], self.kernel_size[1], int(self.in_channels / self.groups), self.filters
+        )
 
-    def call(self, x):
-        input = x
+        self.We = self.add_weight(
+            name='filters',
+            shape=self.filter_shape,
+            initializer=self.kernel_initializer,
+            regularizer=self.kernel_regularizer,
+            constraint=self.kernel_constraint,
+            trainable=True)
+        if self.use_bias:
+            self.b = self.add_weight(
+                name='biases',
+                shape=self.filters,
+                initializer=self.bias_initializer,
+                regularizer=self.bias_regularizer,
+                constraint=self.bias_constraint,
+                trainable=True,
+                dtype=self.dtype)
 
-        outputs = []
-        for conv_1, conv_2, conv_3 in zip(self.convs_1, self.convs_2, self.convs_3):
-            x_out = conv_1(x)
-            x_out = conv_2(x_out)
-            x_out = conv_3(x_out)
-            outputs.append(x_out)
+        self.built = True
 
-        x_out = self.add_1(outputs)
-        x_out = self.add_2([x_out, input])
-        return x_out
+    def call(self, inputs):
+        if self.groups == 1:
+            outputs = self.groupConv(inputs, self.We)
+        else:
+            inputGroups = tf.split(axis=3, num_or_size_splits=self.groups, value=inputs)
+            weightsGroups = tf.split(axis=3, num_or_size_splits=self.groups, value=self.We)
+            convGroups = [self.groupConv(i, k) for i, k in zip(inputGroups, weightsGroups)]
+            outputs = tf.concat(axis=3, values=convGroups)
+        if self.use_bias:
+            outputs = tf.nn.bias_add(outputs, self.b, data_format=self.data_format, name='bias_add')
+
+        if self.activation is not None:
+            outputs = self.activation(outputs)
+
+        return outputs
 
     def get_config(self):
         config = super().get_config()
@@ -286,9 +332,18 @@ class GroupConv2d(layers.Layer):
             {
                 "filters": self.filters,
                 "kernel_size": self.kernel_size,
-                "padding": self.padding,
                 "groups": self.groups,
-                "base_name": self.base_name,
+                "strides": self.strides,
+                "padding": self.padding,
+                "data_format": self.data_format,
+                "dilation_rate": self.dilation_rate,
+                "activation": self.activation,
+                "use_bias": self.use_bias,
+                "kernel_initializer": self.kernel_initializer,
+                "bias_initializer": self.bias_initializer,
+                "activity_regularizer": self.activity_regularizer,
+                "kernel_constraint": self.kernel_constraint,
+                "bias_constraint": self.bias_constraint,
             }
         )
         return config
@@ -332,10 +387,15 @@ def ConvNeXtBlock(
         # )(x)
         x = GroupConv2d(
             filters=projection_dim,
-            kernel_size=7,
-            padding="same",
+            kernel_size=(7, 7),
             groups=projection_dim,
-            base_name=name + "_depthwise_conv",
+            strides=(1, 1),
+            padding="SAME",
+            data_format='channels_last',
+            dilation_rate=1,
+            activation=None,
+            use_bias=True,
+            name = name + "_depthwise_conv",
         )(x)
         x = layers.LayerNormalization(epsilon=1e-6, name=name + "_layernorm")(x)
         x = layers.Dense(4 * projection_dim, name=name + "_pointwise_conv_1")(x)
