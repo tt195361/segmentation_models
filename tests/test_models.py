@@ -174,7 +174,7 @@ def test_convnext():
 
 
 def test_efnv2():
-    backbone = 'EfficientNetV2M'
+    backbone = 'EfficientNetV2L'
 
     _test_shape(
         FPN, backbone, input_shape=(224, 224, 3),

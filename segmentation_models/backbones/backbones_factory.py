@@ -7,7 +7,7 @@ from . import inception_v3 as iv3
 
 from .convnext import ConvNeXtBase, ConvNeXtSmall
 from .swin_transformer import make_swin_transformer
-from .efficient_net_v2 import EfficientNetV2B0, EfficientNetV2M
+from .efficient_net_v2 import EfficientNetV2B0, EfficientNetV2M, EfficientNetV2L
 
 
 class BackbonesFactory(ModelsFactory):
@@ -80,6 +80,7 @@ class BackbonesFactory(ModelsFactory):
                          'convnext_base_stage_0_block_2_add'),
 
         'EfficientNetV2M': ('block5n_add', 'block3e_add', 'block2e_add', 'block1c_add'),
+        'EfficientNetV2L': ('block5s_add', 'block3g_add', 'block2g_add', 'block1d_add'),
     }
 
     _models_update = {
@@ -99,7 +100,8 @@ class BackbonesFactory(ModelsFactory):
         'ConvNeXtSmall': [ConvNeXtSmall, None],
         'SwinTransformer': [make_swin_transformer, None],
         'EfficientNetV2B0': [EfficientNetV2B0, eff.preprocess_input],
-        'EfficientNetV2M': [EfficientNetV2M, eff.preprocess_input]
+        'EfficientNetV2M': [EfficientNetV2M, eff.preprocess_input],
+        'EfficientNetV2L': [EfficientNetV2L, eff.preprocess_input]
     }
 
     # currently not supported
