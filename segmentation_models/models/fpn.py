@@ -111,48 +111,48 @@ def build_fpn(
         dropout=None,
 ):
     input_ = backbone.input
-    # x = backbone.output
-    skip_connection_layers = backbone.output
-    x = skip_connection_layers[-1]
+    x = backbone.output
+    # skip_connection_layers = backbone.output
+    # x = skip_connection_layers[-1]
 
-    # # building decoder blocks with skip connections
-    # skips = ([backbone.get_layer(name=i).output if isinstance(i, str)
-    #           else backbone.get_layer(index=i).output for i in skip_connection_layers])
-    skips = skip_connection_layers[:-1]
+    # building decoder blocks with skip connections
+    skips = ([backbone.get_layer(name=i).output if isinstance(i, str)
+              else backbone.get_layer(index=i).output for i in skip_connection_layers])
+    # skips = skip_connection_layers[:-1]
 
     # build FPN pyramid
-    # p5 = FPNBlock(pyramid_filters, stage=5)(x, skips[0])
-    # p4 = FPNBlock(pyramid_filters, stage=4)(p5, skips[1])
-    # p3 = FPNBlock(pyramid_filters, stage=3)(p4, skips[2])
-    # p2 = FPNBlock(pyramid_filters, stage=2)(p3, skips[3])
-    p5 = FPNBlock(pyramid_filters, stage=5)(x, skips[2])
+    p5 = FPNBlock(pyramid_filters, stage=5)(x, skips[0])
     p4 = FPNBlock(pyramid_filters, stage=4)(p5, skips[1])
-    p3 = FPNBlock(pyramid_filters, stage=3)(p4, skips[0])
+    p3 = FPNBlock(pyramid_filters, stage=3)(p4, skips[2])
+    p2 = FPNBlock(pyramid_filters, stage=2)(p3, skips[3])
+    # p5 = FPNBlock(pyramid_filters, stage=5)(x, skips[2])
+    # p4 = FPNBlock(pyramid_filters, stage=4)(p5, skips[1])
+    # p3 = FPNBlock(pyramid_filters, stage=3)(p4, skips[0])
 
     # add segmentation head to each
     s5 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage5')(p5)
     s4 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage4')(p4)
     s3 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage3')(p3)
-    # s2 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage2')(p2)
+    s2 = DoubleConv3x3BnReLU(segmentation_filters, use_batchnorm, name='segm_stage2')(p2)
 
     # upsampling to same resolution
-    # s5 = layers.UpSampling2D((8, 8), interpolation='nearest', name='upsampling_stage5')(s5)
-    # s4 = layers.UpSampling2D((4, 4), interpolation='nearest', name='upsampling_stage4')(s4)
-    # s3 = layers.UpSampling2D((2, 2), interpolation='nearest', name='upsampling_stage3')(s3)
-    s5 = layers.UpSampling2D((4, 4), interpolation='nearest', name='upsampling_stage5')(s5)
-    s4 = layers.UpSampling2D((2, 2), interpolation='nearest', name='upsampling_stage4')(s4)
+    s5 = layers.UpSampling2D((8, 8), interpolation='nearest', name='upsampling_stage5')(s5)
+    s4 = layers.UpSampling2D((4, 4), interpolation='nearest', name='upsampling_stage4')(s4)
+    s3 = layers.UpSampling2D((2, 2), interpolation='nearest', name='upsampling_stage3')(s3)
+    # s5 = layers.UpSampling2D((4, 4), interpolation='nearest', name='upsampling_stage5')(s5)
+    # s4 = layers.UpSampling2D((2, 2), interpolation='nearest', name='upsampling_stage4')(s4)
 
     # aggregating results
-    # if aggregation == 'sum':
-    #     x = layers.Add(name='aggregation_sum')([s2, s3, s4, s5])
-    # elif aggregation == 'concat':
-    #     concat_axis = 3 if backend.image_data_format() == 'channels_last' else 1
-    #     x = layers.Concatenate(axis=concat_axis, name='aggregation_concat')([s2, s3, s4, s5])
     if aggregation == 'sum':
-        x = layers.Add(name='aggregation_sum')([s3, s4, s5])
+        x = layers.Add(name='aggregation_sum')([s2, s3, s4, s5])
     elif aggregation == 'concat':
         concat_axis = 3 if backend.image_data_format() == 'channels_last' else 1
-        x = layers.Concatenate(axis=concat_axis, name='aggregation_concat')([s3, s4, s5])
+        x = layers.Concatenate(axis=concat_axis, name='aggregation_concat')([s2, s3, s4, s5])
+    # if aggregation == 'sum':
+    #     x = layers.Add(name='aggregation_sum')([s3, s4, s5])
+    # elif aggregation == 'concat':
+    #     concat_axis = 3 if backend.image_data_format() == 'channels_last' else 1
+    #     x = layers.Concatenate(axis=concat_axis, name='aggregation_concat')([s3, s4, s5])
     else:
         raise ValueError('Aggregation parameter should be in ("sum", "concat"), '
                          'got {}'.format(aggregation))
@@ -162,8 +162,8 @@ def build_fpn(
 
     # final stage
     x = Conv3x3BnReLU(segmentation_filters, use_batchnorm, name='final_stage')(x)
-    # x = layers.UpSampling2D(size=(2, 2), interpolation='bilinear', name='final_upsampling')(x)
-    x = layers.UpSampling2D(size=(4, 4), interpolation='bilinear', name='final_upsampling')(x)
+    x = layers.UpSampling2D(size=(2, 2), interpolation='bilinear', name='final_upsampling')(x)
+    # x = layers.UpSampling2D(size=(4, 4), interpolation='bilinear', name='final_upsampling')(x)
 
     # model head (define number of output classes)
     x = layers.Conv2D(
@@ -242,8 +242,8 @@ def FPN(
         **kwargs,
     )
 
-    # if encoder_features == 'default':
-    #     encoder_features = Backbones.get_feature_layers(backbone_name, n=4)
+    if encoder_features == 'default':
+        encoder_features = Backbones.get_feature_layers(backbone_name, n=4)
 
     model = build_fpn(
         backbone=backbone,
